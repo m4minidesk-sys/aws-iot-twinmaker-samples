@@ -345,14 +345,14 @@ export class TmdtApplication extends Construct {
             layers: [
                 new lambdapython.PythonLayerVersion(this, 'opencv_lambda_layer', {
                     entry: path.join(sample_libs_root, 'opencv_utils'),
-                    compatibleRuntimes: [lambda.Runtime.PYTHON_3_10],
+                    compatibleRuntimes: [lambda.Runtime.PYTHON_3_12],
                 }),
             ],
             handler: "handler",
             index: 'data_resource_handler.py',
             memorySize: 256,
             role: iottwinmakerDataCustomResourceLifecycleExecutionRole,
-            runtime: lambda.Runtime.PYTHON_3_10,
+            runtime: lambda.Runtime.PYTHON_3_12,
             timeout: cdk.Duration.minutes(15),
             logRetention: logs.RetentionDays.ONE_DAY,
         });
@@ -501,7 +501,7 @@ export class CookieFactoryV3Stack extends cdk.Stack {
         // lambda layer for helper utilities for implementing UDQ Lambdas
         const udqHelperLayer = new lambdapython.PythonLayerVersion(this, 'udq_utils_layer', {
             entry: path.join(sample_libs_root, "udq_helper_utils"),
-            compatibleRuntimes: [lambda.Runtime.PYTHON_3_10],
+            compatibleRuntimes: [lambda.Runtime.PYTHON_3_12],
         });
 
         //region - sample infrastructure content for telemetry data in Timestream
@@ -547,7 +547,7 @@ export class CookieFactoryV3Stack extends cdk.Stack {
             index: 'udq_data_reader.py',
             memorySize: 256,
             role: timestreamUdqRole,
-            runtime: lambda.Runtime.PYTHON_3_10,
+            runtime: lambda.Runtime.PYTHON_3_12,
             timeout: cdk.Duration.minutes(15),
             logRetention: logs.RetentionDays.ONE_DAY,
             environment: {
@@ -579,7 +579,7 @@ export class CookieFactoryV3Stack extends cdk.Stack {
             index: 'synthetic_udq_reader.py',
             memorySize: 1024,
             role: timestreamUdqRole,
-            runtime: lambda.Runtime.PYTHON_3_10,
+            runtime: lambda.Runtime.PYTHON_3_12,
             timeout: cdk.Duration.minutes(15),
             logRetention: logs.RetentionDays.ONE_DAY,
             environment: {
