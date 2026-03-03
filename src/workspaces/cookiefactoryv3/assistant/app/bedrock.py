@@ -1,5 +1,6 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 2023
 # SPDX-License-Identifier: Apache-2.0
+# Updated 2024: Migrated to Claude 3 / Messages API
 
 from __future__ import annotations
 
@@ -10,10 +11,6 @@ import os
 import logging
 
 logging.getLogger('botocore').setLevel(logging.DEBUG)
-
-import langchain
-langchain.debug = True
-langchain.verbose = True
 
 import chainlit as cl
 from chainlit.context import context
@@ -68,11 +65,11 @@ async def start():
   
 
 @cl.on_message
-async def main(message, context):
+async def main(message: cl.Message):
   llm_chain = cl.user_session.get("chain")
 
   res = await llm_chain.acall(
-    message,
+    message.content,
     callbacks=[cl.AsyncLangchainCallbackHandler()])
   
   await cl.Message(content=res["text"]).send()
