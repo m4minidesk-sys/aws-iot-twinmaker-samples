@@ -13,7 +13,6 @@ from langchain_classic.callbacks.manager import (
 )
 
 import chainlit as cl
-from chainlit.context import context
 from chainlit import run_sync
 
 from tabulate import tabulate
@@ -38,6 +37,7 @@ def run(input: str) -> str:
     return 'Found it!'
 
 def point_camera_to_entity(entityId):
+    from chainlit.context import context
     run_sync(context.session.emit('view', entityId))
 
 ENTITY_EXTRACTION_PROMPT = """
