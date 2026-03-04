@@ -91,16 +91,13 @@ def lambda_handler(event, context):
                 "value": _make_value(prop)
             })
 
-        if entity_id:
-            # Single-entity query: entityId + componentName pattern
-            property_values.append({
-                "entityPropertyReference": {
-                    "entityId": entity_id,
-                    "componentName": component_name,
-                    "propertyName": prop,
-                },
-                "values": values,
-            })
+        if entity_id and component_name:
+            # Single-entity query pattern
+            ref = {
+                "entityId": entity_id,
+                "componentName": component_name,
+                "propertyName": prop,
+            }
         else:
             # Multi-entity query: use externalId pattern
             asset_id = event.get("nextToken", f"mock-asset-{prop}")
@@ -108,10 +105,11 @@ def lambda_handler(event, context):
                 "externalIdProperty": {"telemetryAssetId": asset_id},
                 "propertyName": prop,
             }
-            property_values.append({
-                "entityPropertyReference": ref,
-                "values": values,
-            })
+
+        property_values.append({
+            "entityPropertyReference": ref,
+            "values": values,
+        })
 
     return {
         "propertyValues": property_values,
