@@ -49,8 +49,8 @@ MOCK_VALUES = {
     "Bad_Parts_1Min":      [0.0, 0.0, 0.0, 5.0, 10.0, 15.0, 20.0],
     "Blocked_Time_1Min":   [0.0, 0.0, 5.0, 10.0, 20.0, 40.0, 60.0],
     "Down_Time_1Min":      [0.0, 0.0, 5.0, 10.0, 25.0, 60.0],
-    "Temperature":         [round(x * 0.5, 1) for x in range(130, 170)],
-    "RPM":                 [round(x * 0.5, 1) for x in range(160, 240)],
+    "Temperature":         [round(x * 0.5, 1) for x in range(130, 170)],  # 65.0~85.0
+    "RPM":                 [round(x * 0.5, 1) for x in range(160, 240)],  # 80.0~120.0
     "tankVolume1":         [round(x * 0.1, 2) for x in range(100, 500)],
 }
 
@@ -91,14 +91,27 @@ def lambda_handler(event, context):
                 "value": _make_value(prop)
             })
 
-        property_values.append({
-            "entityPropertyReference": {
-                "entityId": entity_id or "mock-entity",
-                "componentName": component_name,
+        if entity_id:
+            # Single-entity query: entityId + componentName pattern
+            property_values.append({
+                "entityPropertyReference": {
+                    "entityId": entity_id,
+                    "componentName": component_name,
+                    "propertyName": prop,
+                },
+                "values": values,
+            })
+        else:
+            # Multi-entity query: use externalId pattern
+            asset_id = event.get("nextToken", f"mock-asset-{prop}")
+            ref = {
+                "externalIdProperty": {"telemetryAssetId": asset_id},
                 "propertyName": prop,
-            },
-            "values": values,
-        })
+            }
+            property_values.append({
+                "entityPropertyReference": ref,
+                "values": values,
+            })
 
     return {
         "propertyValues": property_values,

@@ -615,17 +615,17 @@ export class CookieFactoryV3Stack extends cdk.Stack {
 
             // supply additional policies to the application lifecycle function to manage access for sample data assets
             additionalDataPolicies: [
-                // permissions to write sample timestream data
-                new PolicyStatement({
-                    effect: Effect.ALLOW,
-                    resources: ["arn:aws:timestream:*:*:database/mock-db/table/mock-table"],
-                    actions: ["timestream:WriteRecords"]
-                }),
-                new PolicyStatement({
-                    effect: Effect.ALLOW,
-                    resources: ["*"], // describe endpoints isn't resource-specific
-                    actions: ["timestream:DescribeEndpoints",]
-                }),
+                // [MOCK] Timestream write/describe policies disabled (Timestream access restricted)
+                // new PolicyStatement({
+                //     effect: Effect.ALLOW,
+                //     resources: ["arn:aws:timestream:*:*:database/mock-db/table/mock-table"],
+                //     actions: ["timestream:WriteRecords"]
+                // }),
+                // new PolicyStatement({
+                //     effect: Effect.ALLOW,
+                //     resources: ["*"],
+                //     actions: ["timestream:DescribeEndpoints"]
+                // }),
                 // permissions to allow setting up sample video data in KVS
                 new PolicyStatement({
                     effect: Effect.ALLOW,
