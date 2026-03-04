@@ -4,6 +4,9 @@ langchain>=0.2.0
 langchain-aws>=0.2.0
 langchain-core>=0.2.0
 langchain-community>=0.2.0
+langchain-classic>=1.0.1
+chainlit>=2.0.0
+langchain-text-splitters>=0.0.1
 google-search-results
 ipywidgets==7.0.0
 opensearch-py==2.2.0
