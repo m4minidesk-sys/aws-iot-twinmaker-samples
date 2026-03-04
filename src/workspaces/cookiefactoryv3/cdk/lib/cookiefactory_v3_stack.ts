@@ -10,9 +10,10 @@ import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as path from 'path';
 
-// import * as timestream from "aws-cdk-lib/aws-timestream";
 import * as iottwinmaker from "aws-cdk-lib/aws-iottwinmaker";
 import * as assets from "aws-cdk-lib/aws-s3-assets";
+import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
+import * as timestream from "aws-cdk-lib/aws-timestream";
 import * as cognito from "aws-cdk-lib/aws-cognito";
 import { CfnOutput } from "aws-cdk-lib/core";
 import {Construct} from "constructs";
@@ -345,16 +346,14 @@ export class TmdtApplication extends Construct {
             layers: [
                 new lambdapython.PythonLayerVersion(this, 'opencv_lambda_layer', {
                     entry: path.join(sample_libs_root, 'opencv_utils'),
-                    compatibleRuntimes: [lambda.Runtime.PYTHON_3_12],
-                    compatibleArchitectures: [lambda.Architecture.ARM_64],
+                    compatibleRuntimes: [lambda.Runtime.PYTHON_3_10],
                 }),
             ],
             handler: "handler",
             index: 'data_resource_handler.py',
             memorySize: 256,
             role: iottwinmakerDataCustomResourceLifecycleExecutionRole,
-            runtime: lambda.Runtime.PYTHON_3_12,
-            architecture: lambda.Architecture.ARM_64,
+            runtime: lambda.Runtime.PYTHON_3_10,
             timeout: cdk.Duration.minutes(15),
             logRetention: logs.RetentionDays.ONE_DAY,
         });
@@ -503,46 +502,56 @@ export class CookieFactoryV3Stack extends cdk.Stack {
         // lambda layer for helper utilities for implementing UDQ Lambdas
         const udqHelperLayer = new lambdapython.PythonLayerVersion(this, 'udq_utils_layer', {
             entry: path.join(sample_libs_root, "udq_helper_utils"),
-            compatibleRuntimes: [lambda.Runtime.PYTHON_3_12],
-            compatibleArchitectures: [lambda.Architecture.ARM_64],
+            compatibleRuntimes: [lambda.Runtime.PYTHON_3_10],
         });
 
-        //region - sample infrastructure content for telemetry data in Timestream
-        // [MOCK] Timestream disabled - using mock Lambda
-        //         const timestreamDB = new timestream.CfnDatabase(this, "TimestreamTelemetry", {
-        //             databaseName: `${this.stackName}`
-        //         });
-        //         const timestreamTable = new timestream.CfnTable(this, "Telemetry", {
-        //             tableName: `Telemetry`,
-        //             // databaseName: `${timestreamDB.databaseName}`, // disabled
-        //             retentionProperties: {
-        //                 memoryStoreRetentionPeriodInHours: (24 * 30).toString(10),
-        //                 magneticStoreRetentionPeriodInDays: (24 * 30).toString(10)
-        //             }
-        //         });
-        //         timestreamTable.node.addDependency(timestreamDB);
+        //region - sample infrastructure content for telemetry data in Timestream for InfluxDB
+        const influxDbInstance = new timestream.CfnInfluxDBInstance(this, "InfluxDBTelemetry", {
+            name: `${this.stackName}`,
+            organization: "cookiefactory",
+            bucket: "telemetry",
+            dbInstanceType: "db.influx.medium",
+            allocatedStorage: 20,
+            publiclyAccessible: false,
+        });
 
-        const timestreamUdqRole = new iam.Role(this, 'timestreamUdqRole', {
+        // Secrets Manager for InfluxDB token (populated post-deploy)
+        const influxDbTokenSecret = new secretsmanager.Secret(this, "InfluxDbTokenSecret", {
+            secretName: `${this.stackName}/influxdb-token`,
+            generateSecretString: {
+                secretStringTemplate: JSON.stringify({ token: "REPLACE_WITH_INFLUXDB_TOKEN" }),
+                generateStringKey: "_unused",
+            },
+        });
+
+        const influxDbUdqRole = new iam.Role(this, 'influxDbUdqRole', {
             assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
         });
-        timestreamUdqRole.addManagedPolicy(iam.ManagedPolicy.fromManagedPolicyArn(this, "lambdaExecRole", "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"))
-        //         timestreamUdqRole.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName("AmazonTimestreamReadOnlyAccess"))
-        /* [MOCK] Timestream write policy disabled
-                timestreamUdqRole.addToPolicy(
-                  new iam.PolicyStatement({
-                      actions: [
-                          "iottwinmaker:GetEntity",
-                          "iottwinmaker:GetWorkspace"],
-                      effect: iam.Effect.ALLOW,
-                      resources: [
-                          `arn:aws:iottwinmaker:${this.region}:${this.account}:workspace/${workspaceId}/*`,
-                          `arn:aws:iottwinmaker:${this.region}:${this.account}:workspace/${workspaceId}`
-                      ],
-                  })
-                );
-        */
+        influxDbUdqRole.addManagedPolicy(iam.ManagedPolicy.fromManagedPolicyArn(this, "lambdaExecRole", "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"))
+        influxDbUdqRole.addToPolicy(
+          new iam.PolicyStatement({
+              actions: ["timestream-influxdb:GetDbInstance"],
+              effect: iam.Effect.ALLOW,
+              resources: [
+                  `arn:aws:timestream-influxdb:${this.region}:${this.account}:dbinstance/${this.stackName}`
+              ],
+          })
+        );
+        influxDbUdqRole.addToPolicy(
+          new iam.PolicyStatement({
+              actions: [
+                  "iottwinmaker:GetEntity",
+                  "iottwinmaker:GetWorkspace"],
+              effect: iam.Effect.ALLOW,
+              resources: [
+                  `arn:aws:iottwinmaker:${this.region}:${this.account}:workspace/${workspaceId}/*`,
+                  `arn:aws:iottwinmaker:${this.region}:${this.account}:workspace/${workspaceId}`
+              ],
+          })
+        );
+        influxDbTokenSecret.grantRead(influxDbUdqRole);
 
-        const timestreamReaderUDQ = new lambdapython.PythonFunction(this, 'timestreamReaderUDQ', {
+        const influxDbReaderUDQ = new lambdapython.PythonFunction(this, 'influxDbReaderUDQ', {
             entry: path.join(sample_modules_root,"timestream_telemetry","lambda_function"),
             layers: [
                 udqHelperLayer,
@@ -552,16 +561,18 @@ export class CookieFactoryV3Stack extends cdk.Stack {
             handler: "lambda_handler",
             index: 'udq_data_reader.py',
             memorySize: 256,
-            role: timestreamUdqRole,
-            runtime: lambda.Runtime.PYTHON_3_12,
-            architecture: lambda.Architecture.ARM_64,
+            role: influxDbUdqRole,
+            runtime: lambda.Runtime.PYTHON_3_10,
             timeout: cdk.Duration.minutes(15),
             logRetention: logs.RetentionDays.ONE_DAY,
             environment: {
-                "TIMESTREAM_DATABASE_NAME": "mock-db",
-                "TIMESTREAM_TABLE_NAME": "mock-table",
+                "INFLUXDB_ENDPOINT": `https://${influxDbInstance.attrEndpoint}:8086`,
+                "INFLUXDB_ORG": "cookiefactory",
+                "INFLUXDB_BUCKET": "telemetry",
+                "INFLUXDB_TOKEN": influxDbTokenSecret.secretArn,
             }
         });
+        influxDbReaderUDQ.node.addDependency(influxDbInstance);
         //endregion
 
         //region - sample infrastructure content for synthetic cookieline telemetry data
@@ -585,9 +596,8 @@ export class CookieFactoryV3Stack extends cdk.Stack {
             handler: "lambda_handler",
             index: 'synthetic_udq_reader.py',
             memorySize: 1024,
-            role: timestreamUdqRole,
-            runtime: lambda.Runtime.PYTHON_3_12,
-            architecture: lambda.Architecture.ARM_64,
+            role: influxDbUdqRole,
+            runtime: lambda.Runtime.PYTHON_3_10,
             timeout: cdk.Duration.minutes(15),
             logRetention: logs.RetentionDays.ONE_DAY,
             environment: {
@@ -605,8 +615,8 @@ export class CookieFactoryV3Stack extends cdk.Stack {
             workspaceBucket: workspaceBucket,
             tmdtRoot: path.join(cookiefactoryv3_root, "tmdt_project"),
             replacements: {
-                "__FILL_IN_TS_DB__": "mock-db",
-                "__TO_FILL_IN_TIMESTREAM_LAMBDA_ARN__": `${timestreamReaderUDQ.functionArn}`,
+                "__FILL_IN_TS_DB__": `https://${influxDbInstance.attrEndpoint}:8086`,
+                "__TO_FILL_IN_TIMESTREAM_LAMBDA_ARN__": `${influxDbReaderUDQ.functionArn}`,
                 "__TO_FILL_IN_SYNTHETIC_DATA_ARN__": `${syntheticDataUDQ.functionArn}`,
                 '"targetEntityId"': '"TargetEntityId"',
             },
@@ -615,17 +625,12 @@ export class CookieFactoryV3Stack extends cdk.Stack {
 
             // supply additional policies to the application lifecycle function to manage access for sample data assets
             additionalDataPolicies: [
-                // [MOCK] Timestream write/describe policies disabled (Timestream access restricted)
-                // new PolicyStatement({
-                //     effect: Effect.ALLOW,
-                //     resources: ["arn:aws:timestream:*:*:database/mock-db/table/mock-table"],
-                //     actions: ["timestream:WriteRecords"]
-                // }),
-                // new PolicyStatement({
-                //     effect: Effect.ALLOW,
-                //     resources: ["*"],
-                //     actions: ["timestream:DescribeEndpoints"]
-                // }),
+                // permissions to read InfluxDB instance info
+                new PolicyStatement({
+                    effect: Effect.ALLOW,
+                    resources: [`arn:aws:timestream-influxdb:${this.region}:${this.account}:dbinstance/${this.stackName}`],
+                    actions: ["timestream-influxdb:GetDbInstance"]
+                }),
                 // permissions to allow setting up sample video data in KVS
                 new PolicyStatement({
                     effect: Effect.ALLOW,
@@ -641,6 +646,6 @@ export class CookieFactoryV3Stack extends cdk.Stack {
                 })
             ]
         });
-        // tmdtApp.node.addDependency(timestreamTable);
+        tmdtApp.node.addDependency(influxDbInstance);
     }
 }
