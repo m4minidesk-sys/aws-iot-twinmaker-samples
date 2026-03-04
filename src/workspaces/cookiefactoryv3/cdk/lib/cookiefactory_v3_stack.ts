@@ -515,13 +515,11 @@ export class CookieFactoryV3Stack extends cdk.Stack {
             publiclyAccessible: false,
         });
 
-        // Secrets Manager for InfluxDB token (populated post-deploy)
+        // Secrets Manager for InfluxDB token (populated post-deploy via InfluxDB Console)
+        // Token must be updated manually after deploying InfluxDB and generating an API token.
         const influxDbTokenSecret = new secretsmanager.Secret(this, "InfluxDbTokenSecret", {
             secretName: `${this.stackName}/influxdb-token`,
-            generateSecretString: {
-                secretStringTemplate: JSON.stringify({ token: "REPLACE_WITH_INFLUXDB_TOKEN" }),
-                generateStringKey: "_unused",
-            },
+            secretStringValue: cdk.SecretValue.unsafePlainText(JSON.stringify({ token: "" })),
         });
 
         const influxDbUdqRole = new iam.Role(this, 'influxDbUdqRole', {
