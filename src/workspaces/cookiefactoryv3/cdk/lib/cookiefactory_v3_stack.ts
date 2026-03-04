@@ -10,7 +10,7 @@ import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as path from 'path';
 
-import * as timestream from "aws-cdk-lib/aws-timestream";
+// import * as timestream from "aws-cdk-lib/aws-timestream";
 import * as iottwinmaker from "aws-cdk-lib/aws-iottwinmaker";
 import * as assets from "aws-cdk-lib/aws-s3-assets";
 import * as cognito from "aws-cdk-lib/aws-cognito";
@@ -346,6 +346,7 @@ export class TmdtApplication extends Construct {
                 new lambdapython.PythonLayerVersion(this, 'opencv_lambda_layer', {
                     entry: path.join(sample_libs_root, 'opencv_utils'),
                     compatibleRuntimes: [lambda.Runtime.PYTHON_3_12],
+                    compatibleArchitectures: [lambda.Architecture.ARM_64],
                 }),
             ],
             handler: "handler",
@@ -353,6 +354,7 @@ export class TmdtApplication extends Construct {
             memorySize: 256,
             role: iottwinmakerDataCustomResourceLifecycleExecutionRole,
             runtime: lambda.Runtime.PYTHON_3_12,
+            architecture: lambda.Architecture.ARM_64,
             timeout: cdk.Duration.minutes(15),
             logRetention: logs.RetentionDays.ONE_DAY,
         });
@@ -502,39 +504,43 @@ export class CookieFactoryV3Stack extends cdk.Stack {
         const udqHelperLayer = new lambdapython.PythonLayerVersion(this, 'udq_utils_layer', {
             entry: path.join(sample_libs_root, "udq_helper_utils"),
             compatibleRuntimes: [lambda.Runtime.PYTHON_3_12],
+            compatibleArchitectures: [lambda.Architecture.ARM_64],
         });
 
         //region - sample infrastructure content for telemetry data in Timestream
-        const timestreamDB = new timestream.CfnDatabase(this, "TimestreamTelemetry", {
-            databaseName: `${this.stackName}`
-        });
-        const timestreamTable = new timestream.CfnTable(this, "Telemetry", {
-            tableName: `Telemetry`,
-            databaseName: `${timestreamDB.databaseName}`, // create implicit CFN dependency
-            retentionProperties: {
-                memoryStoreRetentionPeriodInHours: (24 * 30).toString(10),
-                magneticStoreRetentionPeriodInDays: (24 * 30).toString(10)
-            }
-        });
-        timestreamTable.node.addDependency(timestreamDB);
+        // [MOCK] Timestream disabled - using mock Lambda
+        //         const timestreamDB = new timestream.CfnDatabase(this, "TimestreamTelemetry", {
+        //             databaseName: `${this.stackName}`
+        //         });
+        //         const timestreamTable = new timestream.CfnTable(this, "Telemetry", {
+        //             tableName: `Telemetry`,
+        //             // databaseName: `${timestreamDB.databaseName}`, // disabled
+        //             retentionProperties: {
+        //                 memoryStoreRetentionPeriodInHours: (24 * 30).toString(10),
+        //                 magneticStoreRetentionPeriodInDays: (24 * 30).toString(10)
+        //             }
+        //         });
+        //         timestreamTable.node.addDependency(timestreamDB);
 
         const timestreamUdqRole = new iam.Role(this, 'timestreamUdqRole', {
             assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
         });
         timestreamUdqRole.addManagedPolicy(iam.ManagedPolicy.fromManagedPolicyArn(this, "lambdaExecRole", "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"))
-        timestreamUdqRole.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName("AmazonTimestreamReadOnlyAccess"))
-        timestreamUdqRole.addToPolicy(
-          new iam.PolicyStatement({
-              actions: [
-                  "iottwinmaker:GetEntity",
-                  "iottwinmaker:GetWorkspace"],
-              effect: iam.Effect.ALLOW,
-              resources: [
-                  `arn:aws:iottwinmaker:${this.region}:${this.account}:workspace/${workspaceId}/*`,
-                  `arn:aws:iottwinmaker:${this.region}:${this.account}:workspace/${workspaceId}`
-              ],
-          })
-        );
+        //         timestreamUdqRole.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName("AmazonTimestreamReadOnlyAccess"))
+        /* [MOCK] Timestream write policy disabled
+                timestreamUdqRole.addToPolicy(
+                  new iam.PolicyStatement({
+                      actions: [
+                          "iottwinmaker:GetEntity",
+                          "iottwinmaker:GetWorkspace"],
+                      effect: iam.Effect.ALLOW,
+                      resources: [
+                          `arn:aws:iottwinmaker:${this.region}:${this.account}:workspace/${workspaceId}/*`,
+                          `arn:aws:iottwinmaker:${this.region}:${this.account}:workspace/${workspaceId}`
+                      ],
+                  })
+                );
+        */
 
         const timestreamReaderUDQ = new lambdapython.PythonFunction(this, 'timestreamReaderUDQ', {
             entry: path.join(sample_modules_root,"timestream_telemetry","lambda_function"),
@@ -548,11 +554,12 @@ export class CookieFactoryV3Stack extends cdk.Stack {
             memorySize: 256,
             role: timestreamUdqRole,
             runtime: lambda.Runtime.PYTHON_3_12,
+            architecture: lambda.Architecture.ARM_64,
             timeout: cdk.Duration.minutes(15),
             logRetention: logs.RetentionDays.ONE_DAY,
             environment: {
-                "TIMESTREAM_DATABASE_NAME": `${timestreamDB.databaseName}`,
-                "TIMESTREAM_TABLE_NAME": `${timestreamTable.tableName}`,
+                "TIMESTREAM_DATABASE_NAME": "mock-db",
+                "TIMESTREAM_TABLE_NAME": "mock-table",
             }
         });
         //endregion
@@ -580,6 +587,7 @@ export class CookieFactoryV3Stack extends cdk.Stack {
             memorySize: 1024,
             role: timestreamUdqRole,
             runtime: lambda.Runtime.PYTHON_3_12,
+            architecture: lambda.Architecture.ARM_64,
             timeout: cdk.Duration.minutes(15),
             logRetention: logs.RetentionDays.ONE_DAY,
             environment: {
@@ -597,7 +605,7 @@ export class CookieFactoryV3Stack extends cdk.Stack {
             workspaceBucket: workspaceBucket,
             tmdtRoot: path.join(cookiefactoryv3_root, "tmdt_project"),
             replacements: {
-                "__FILL_IN_TS_DB__": `${timestreamDB.databaseName}`,
+                "__FILL_IN_TS_DB__": "mock-db",
                 "__TO_FILL_IN_TIMESTREAM_LAMBDA_ARN__": `${timestreamReaderUDQ.functionArn}`,
                 "__TO_FILL_IN_SYNTHETIC_DATA_ARN__": `${syntheticDataUDQ.functionArn}`,
                 '"targetEntityId"': '"TargetEntityId"',
@@ -610,7 +618,7 @@ export class CookieFactoryV3Stack extends cdk.Stack {
                 // permissions to write sample timestream data
                 new PolicyStatement({
                     effect: Effect.ALLOW,
-                    resources: [`arn:aws:timestream:${this.region}:${this.account}:database/${timestreamDB.databaseName}/table/${timestreamTable.tableName}`],
+                    resources: ["arn:aws:timestream:*:*:database/mock-db/table/mock-table"],
                     actions: ["timestream:WriteRecords"]
                 }),
                 new PolicyStatement({
@@ -633,6 +641,6 @@ export class CookieFactoryV3Stack extends cdk.Stack {
                 })
             ]
         });
-        tmdtApp.node.addDependency(timestreamTable);
+        // tmdtApp.node.addDependency(timestreamTable);
     }
 }
